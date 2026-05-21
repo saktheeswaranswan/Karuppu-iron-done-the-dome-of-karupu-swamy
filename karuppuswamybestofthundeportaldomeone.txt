@@ -1,0 +1,445 @@
+// APDE Processing Android
+// 3D Hénon Laser Thunder Dome Attractor
+// Neon membrane thickness + circular portal crater edition
+// Touch drag to rotate / Slide to manipulate chaos parameters
+
+int particleCount = 22000;
+Particle[] particles;
+
+float domeRadius;
+float domeThickness;
+int membraneLayers = 5;
+
+float rotX = 0.45f;
+float rotY = 0.0f;
+float targetRotX = 0.45f;
+float targetRotY = 0.0f;
+
+float lastTouchX, lastTouchY;
+boolean dragging = false;
+
+float globalDischargeIntensity;
+float portalPulse;
+float portalCraterPulse;
+
+// Hénon map parameters
+float henonA = 1.40f;
+float henonB = 0.30f;
+
+Slider sliderA;
+
+void setup() {
+  fullScreen(P3D);
+  smooth(8);
+  sphereDetail(10);
+
+  domeRadius = min(width, height) * 0.45f;
+  domeThickness = min(width, height) * 0.14f;
+
+  particles = new Particle[particleCount];
+  for (int i = 0; i < particleCount; i++) {
+    particles[i] = new Particle();
+  }
+
+  float sw = width * 0.58f;
+  float sh = 22;
+  sliderA = new Slider(width * 0.10f, height * 0.05f, sw, sh, 1.20f, 1.60f, henonA, "Quantum Map Stress (A)");
+}
+
+void draw() {
+  background(4, 1, 2);
+
+  directionalLight(255, 15, 5, 0, 1, -0.5f);
+  directionalLight(255, 90, 30, 0.7f, -0.7f, -1);
+  ambientLight(8, 0, 2);
+
+  globalDischargeIntensity = noise(frameCount * 0.06f);
+  portalPulse = 1.0f + sin(frameCount * 0.10f) * 0.08f + noise(frameCount * 0.025f) * 0.06f;
+  portalCraterPulse = 1.0f + noise(frameCount * 0.05f) * 0.15f;
+
+  if (!dragging) {
+    targetRotY += 0.006f;
+    targetRotX = 0.45f + sin(frameCount * 0.005f) * 0.08f;
+  }
+
+  rotX += (targetRotX - rotX) * 0.10f;
+  rotY += (targetRotY - rotY) * 0.10f;
+
+  translate(width * 0.5f, height * 0.68f, -50);
+  rotateX(rotX);
+  rotateY(rotY);
+
+  blendMode(ADD);
+  hint(DISABLE_DEPTH_MASK);
+
+  drawPortalCrater();
+  drawSparkingLaserPortal();
+  drawStructuralWireframe();
+
+  for (int i = 0; i < particleCount; i++) {
+    particles[i].update();
+    particles[i].display();
+  }
+
+  hint(ENABLE_DEPTH_MASK);
+  blendMode(BLEND);
+
+  hint(DISABLE_DEPTH_TEST);
+  camera();
+  noLights();
+  sliderA.display();
+  hint(ENABLE_DEPTH_TEST);
+
+  henonA = sliderA.value;
+}
+
+void drawPortalCrater() {
+  pushMatrix();
+  rotateX(HALF_PI);
+
+  float craterRadius = domeRadius * 0.23f * portalCraterPulse;
+  int rings = 7;
+
+  noFill();
+  for (int i = 0; i < rings; i++) {
+    float t = i / float(rings - 1);
+    float r = craterRadius * (0.45f + t * 1.2f);
+    float a = 210 * (1.0f - t) * portalPulse;
+
+    strokeWeight(3.0f - t * 1.8f);
+    stroke(255, 35 + i * 14, 10, a * 0.55f);
+    ellipse(0, 0, r * 2.0f, r * 2.0f);
+  }
+
+  // Bright circular crater core
+  strokeWeight(1.5f);
+  stroke(255, 245, 235, 220);
+  ellipse(0, 0, craterRadius * 0.92f, craterRadius * 0.92f);
+
+  // Inner rotating fracture lines
+  rotateZ(frameCount * 0.015f);
+  for (int i = 0; i < 10; i++) {
+    float ang = TWO_PI * i / 10.0f;
+    float len = craterRadius * (0.22f + noise(i * 0.4f, frameCount * 0.05f) * 0.25f);
+    strokeWeight(1.2f);
+    stroke(255, 80, 20, 160);
+    line(cos(ang) * len * 0.12f, sin(ang) * len * 0.12f, cos(ang) * len, sin(ang) * len);
+  }
+
+  popMatrix();
+}
+
+void drawSparkingLaserPortal() {
+  pushMatrix();
+  rotateZ(frameCount * 0.01f);
+
+  int segments = 140;
+  float baseRadius = domeRadius * 0.30f * portalPulse;
+
+  // Outer blooming plasma ring aura
+  noFill();
+  strokeWeight(6.0f);
+  stroke(255, 25, 2, 55);
+  beginShape();
+  for (int i = 0; i < segments; i++) {
+    float ang = map(i, 0, segments, 0, TWO_PI);
+    float r = baseRadius + noise(i * 0.25f, frameCount * 0.12f) * 18.0f;
+    vertex(cos(ang) * r, sin(ang) * r, 0);
+  }
+  endShape(CLOSE);
+
+  // White-hot inner ring
+  strokeWeight(2.2f);
+  stroke(255, 245, 230, 245);
+  beginShape();
+  for (int i = 0; i < segments; i++) {
+    float ang = map(i, 0, segments, 0, TWO_PI);
+    float r = baseRadius + (noise(i * 0.3f, frameCount * 0.2f + 50) - 0.5f) * 6.0f;
+    vertex(cos(ang) * r, sin(ang) * r, 0);
+  }
+  endShape(CLOSE);
+
+  // Portal sparks
+  for (int k = 0; k < 10; k++) {
+    if (random(1.0f) < 0.20f) {
+      float pAngle = random(TWO_PI);
+      float pDist = baseRadius + random(-8, 16);
+      strokeWeight(random(1.4f, 3.2f));
+      stroke(255, random(130, 220), 40, 180);
+      point(cos(pAngle) * pDist, sin(pAngle) * pDist, random(-8, 8));
+    }
+  }
+
+  popMatrix();
+}
+
+void drawStructuralWireframe() {
+  noFill();
+
+  // Main hemisphere outline
+  strokeWeight(1.2f);
+  stroke(255, 12, 2, 16);
+  pushMatrix();
+  rotateX(HALF_PI);
+  ellipse(0, 0, domeRadius * 2, domeRadius * 2);
+  popMatrix();
+
+  // Membrane thickness shells
+  for (int j = 0; j <= membraneLayers; j++) {
+    float r = domeRadius - (j * (domeThickness / float(membraneLayers)));
+    float pulse = 1.0f + noise(j * 0.35f, frameCount * 0.03f) * 0.03f;
+
+    stroke(255, 28, 8, 10);
+    strokeWeight(0.7f);
+
+    pushMatrix();
+    rotateY(j * PI / float(membraneLayers) + frameCount * 0.002f);
+    ellipse(0, 0, r * 2 * pulse, r * 2 * pulse);
+    popMatrix();
+  }
+}
+
+void mousePressed() {
+  if (sliderA.press(mouseX, mouseY)) {
+    dragging = false;
+    return;
+  }
+  dragging = true;
+  lastTouchX = mouseX;
+  lastTouchY = mouseY;
+}
+
+void mouseDragged() {
+  if (sliderA.drag(mouseX, mouseY)) return;
+  if (!dragging) return;
+
+  float dx = mouseX - lastTouchX;
+  float dy = mouseY - lastTouchY;
+
+  targetRotY += dx * 0.007f;
+  targetRotX += dy * 0.007f;
+  targetRotX = constrain(targetRotX, -0.2f, 1.4f);
+
+  lastTouchX = mouseX;
+  lastTouchY = mouseY;
+}
+
+void mouseReleased() {
+  dragging = false;
+  sliderA.release();
+}
+
+class Particle {
+  float theta;
+  float phi;
+  float speedTheta;
+  float sparkleFlicker;
+
+  float hx, hy;
+  int assignedLayer;
+
+  boolean isStriking = false;
+  float strikeEnergy = 0.0f;
+  PVector[] lightningPath;
+
+  Particle() {
+    resetHenon();
+
+    theta = random(TWO_PI);
+    phi = acos(random(0.0f, 1.0f));
+    speedTheta = random(0.0002f, 0.0012f) * (random(1.0f) > 0.5f ? 1 : -1);
+
+    assignedLayer = floor(random(membraneLayers));
+    lightningPath = new PVector[6];
+  }
+
+  void resetHenon() {
+    hx = random(-1.2f, 1.2f);
+    hy = random(-0.3f, 0.3f);
+  }
+
+  void update() {
+    float nx = 1.0f - henonA * hx * hx + henonB * hy;
+    float ny = hx;
+
+    hx = nx;
+    hy = ny;
+
+    if (Float.isNaN(hx) || Float.isInfinite(hx) || abs(hx) > 3.0f) {
+      resetHenon();
+    }
+
+    theta += speedTheta;
+    if (theta > TWO_PI) theta -= TWO_PI;
+    if (theta < 0) theta += TWO_PI;
+
+    sparkleFlicker = noise(hx * 2.0f, frameCount * 0.08f);
+
+    if (!isStriking && abs(hx) > 1.25f && random(1.0f) < 0.00045f * globalDischargeIntensity) {
+      isStriking = true;
+      strikeEnergy = 1.0f;
+      generateLaserStrike();
+    }
+
+    if (isStriking) {
+      strikeEnergy *= 0.82f;
+      if (strikeEnergy < 0.02f) {
+        isStriking = false;
+      }
+    }
+  }
+
+  void generateLaserStrike() {
+    float layerOffset = domeThickness / float(membraneLayers);
+    float currentRadiusBase = domeRadius - (assignedLayer * layerOffset) - random(layerOffset * 0.9f);
+
+    // Start point inside membrane thickness
+    PVector startPoint = new PVector(
+      currentRadiusBase * sin(phi) * cos(theta),
+      -currentRadiusBase * cos(phi),
+      currentRadiusBase * sin(phi) * sin(theta)
+    );
+
+    // Target into the bright circular portal crater
+    float targetRad = domeRadius * 0.22f;
+    float targetAng = random(TWO_PI);
+    PVector endPoint = new PVector(
+      cos(targetAng) * targetRad,
+      random(-targetRad * 0.06f, targetRad * 0.06f),
+      sin(targetAng) * targetRad
+    );
+
+    lightningPath[0] = startPoint;
+    lightningPath[5] = endPoint;
+
+    for (int i = 1; i < 5; i++) {
+      float segmentPercentage = i / 5.0f;
+      PVector nodePos = PVector.lerp(startPoint, endPoint, segmentPercentage);
+
+      float dispersionForce = domeThickness * 0.35f * (1.0f - segmentPercentage * 0.55f);
+      nodePos.x += random(-dispersionForce, dispersionForce);
+      nodePos.y += random(-dispersionForce, dispersionForce);
+      nodePos.z += random(-dispersionForce, dispersionForce);
+
+      lightningPath[i] = nodePos;
+    }
+  }
+
+  void display() {
+    if (isStriking) {
+      noFill();
+
+      strokeWeight(4.5f * strikeEnergy);
+      stroke(255, 15, 2, 110 * strikeEnergy);
+      beginShape();
+      for (int i = 0; i < 6; i++) {
+        vertex(lightningPath[i].x, lightningPath[i].y, lightningPath[i].z);
+      }
+      endShape();
+
+      strokeWeight(1.2f);
+      stroke(255, 240, 225, 255 * strikeEnergy);
+      beginShape();
+      for (int i = 0; i < 6; i++) {
+        vertex(lightningPath[i].x, lightningPath[i].y, lightningPath[i].z);
+      }
+      endShape();
+    } else {
+      float layerOffset = domeThickness / float(membraneLayers);
+
+      // Keep particles inside membrane thickness
+      float shellRadius = domeRadius - (assignedLayer * layerOffset) - (layerOffset * 0.5f);
+      float dynamicRadius = shellRadius + (hx * 4.0f);
+
+      float x = dynamicRadius * sin(phi) * cos(theta);
+      float y = -dynamicRadius * cos(phi);
+      float z = dynamicRadius * sin(phi) * sin(theta);
+
+      pushMatrix();
+      translate(x, y, z);
+      noStroke();
+
+      if (sparkleFlicker > 0.82f) {
+        fill(255, 232, 215, 240);
+        ellipse(0, 0, 2.2f, 2.2f);
+      } else {
+        fill(255, 25, 10, 150 * sparkleFlicker);
+        ellipse(0, 0, 1.4f, 1.4f);
+      }
+
+      popMatrix();
+    }
+  }
+}
+
+class Slider {
+  float x, y, w, h;
+  float minVal, maxVal;
+  float value;
+  String label;
+  boolean active = false;
+
+  Slider(float x, float y, float w, float h, float minVal, float maxVal, float startVal, String label) {
+    this.x = x;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+    this.minVal = minVal;
+    this.maxVal = maxVal;
+    this.value = constrain(startVal, minVal, maxVal);
+    this.label = label;
+  }
+
+  boolean over(float mx, float my) {
+    return mx >= x && mx <= x + w && my >= y && my <= y + h;
+  }
+
+  boolean press(float mx, float my) {
+    if (over(mx, my)) {
+      active = true;
+      setFromMouse(mx);
+      return true;
+    }
+    return false;
+  }
+
+  boolean drag(float mx, float my) {
+    if (!active) return false;
+    setFromMouse(mx);
+    return true;
+  }
+
+  void release() {
+    active = false;
+  }
+
+  void setFromMouse(float mx) {
+    float t = constrain((mx - x) / w, 0, 1);
+    value = lerp(minVal, maxVal, t);
+  }
+
+  void display() {
+    pushStyle();
+    noStroke();
+
+    fill(16, 5, 6, 200);
+    rect(x - 12, y - 8, w + 24, h + 34, 12);
+
+    fill(255, 30, 10, 60);
+    rect(x, y, w, h, 8);
+
+    float knobX = map(value, minVal, maxVal, x, x + w);
+    fill(255, 70, 30, 180);
+    rect(x, y, knobX - x, h, 8);
+
+    fill(255, 235, 220, 230);
+    ellipse(knobX, y + h * 0.5f, h * 1.5f, h * 1.5f);
+
+    fill(255, 240, 235, 230);
+    textAlign(LEFT, BOTTOM);
+    textSize(24);
+    text(label + ": " + nf(value, 1, 3), x, y - 6);
+
+    popStyle();
+  }
+}
